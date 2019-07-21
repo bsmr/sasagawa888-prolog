@@ -1,4 +1,4 @@
-defmodule Lisp do
+defmodule Prolog do
   def repl() do
     IO.puts("Prolog in Elixir")
     repl1([],[],[])
@@ -7,7 +7,7 @@ defmodule Lisp do
   defp repl1(env,buf,dif) do
     try do
       IO.write("?- ")
-      {s,buf1} = Read.read(buf)
+      {s,buf1} = Read.parse(buf)
       {s1,env1,dif1} = Prove.prove(s,env,buf,dif)
       Print.print(s1)
       repl1(env1,buf1,dif1)
