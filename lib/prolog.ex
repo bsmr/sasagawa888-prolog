@@ -4,17 +4,17 @@ defmodule Prolog do
     repl1([],[],[])
   end
 
-  defp repl1(env,buf,dif) do
+  defp repl1(env,buf,def) do
     try do
       IO.write("?- ")
       {s,buf1} = Read.parse(buf)
-      {s1,env1,dif1} = Prove.prove(s,env,buf,dif)
+      {s1,env1,def1} = Prove.prove(s,env,buf,def,1)
       Print.print(s1)
-      repl1(env1,buf1,dif1)
+      repl1(env1,buf1,def1)
     catch
       x -> IO.puts(x)
       if x != "goodbye" do
-        repl1(env,buf,dif)
+        repl1(env,buf,def)
       else
         true
       end
@@ -26,14 +26,24 @@ defmodule Read do
   def parse(buf) do
     {s1,buf1} = read(buf)
     {s2,buf2} = read(buf1)
-    cond do
-      s2 == :. -> s1
-      s2 == :":-" -> [s2,s1,parse1(buf2)]
+    if s2 == :. do {s1,buf2}
+    else if s2 == :":-" do
+      {s3,buf3} = parse1(buf2,[])
+      {[:clause,s1,s3],buf3}
+    else
+      throw "error"
+    end
     end
   end
 
-  def parse1(buf) do
-    [1,2,3]
+  def parse1(buf,res) do
+    {s1,buf1} = read(buf)
+    {s2,buf2} = read(buf1)
+    cond do
+      s2 == :. -> {res++[s1],buf2}
+      s2 == :"," -> parse1(buf2,res++[s1])
+      true -> throw "error parse1"
+    end
   end
 
   def read([]) do
@@ -50,9 +60,22 @@ defmodule Read do
     read_list(xs,[])
   end
   def read([x,"("|xs]) do
-    pred = String.to_atom(x)
+    name = String.to_atom(x)
     {tuple,rest} = read_tuple(xs,[])
-    {[:pred,[pred|tuple]],rest}
+    if is_builtin(name) do
+      {[:builtin,[name|tuple]],rest}
+    else
+      {[:pred,[name|tuple]],rest}
+    end
+  end
+  def read([x,"."|_]) do
+    name = String.to_atom(x)
+    if is_builtin(name) do
+      {[:builtin,[name]],["."]}
+    else
+      {[:pred,[name]],["."]}
+    end
+
   end
   def read([x|xs]) do
     cond do
@@ -116,7 +139,7 @@ defmodule Read do
     {s,_} = read([x])
     read_tuple(xs,ls++[s])
   end
-  defp read_tuple([x,"]"|xs],ls) do
+  defp read_tuple([x,")"|xs],ls) do
     {s,_} = read([x])
     {ls++[s],xs}
   end
@@ -214,14 +237,146 @@ defmodule Read do
       true -> false
     end
   end
+
+  def is_builtin(x) do
+    Enum.member?([:assert,:halt,:write],x)
+  end
 end
 
   #----------------prove-------------
 defmodule Prove do
-  def prove(x,env,buf,dif) do
-    {x,env,buf,dif}
+  def prove([:pred,x],y,env,def,n) do
+    [name|_] = x
+    def1 = def[name]
+    prove_pred(x,def1,y,env,def,n)
   end
+  def prove([:builtin,x],y,env,def,n) do
+    prove_builtin(x,y,env,def,n)
+  end
+
+  def prove_pred(_,nil,_,env,def,_) do {false,env,def} end
+  def prove_pred(_,[],_,env,def,_) do {false,env,def} end
+  def prove_pred(x,[d|ds],y,env,def,n) do
+    d1 = alpha_conv(d,n)
+    if is_pred(d1) && unify(x,d1,env) do
+      prove_all(y,env,def,n+1)
+    end
+    if is_clause(d1) && unify(x,head(d1),env) do
+      prove_all([body(d1)|y],env,def,n+1)
+    end
+    prove_pred(x,ds,y,env,def,n)
+  end
+
+  def prove_builtin([:halt],_,_,_,_) do
+    throw "goodbye"
+  end
+  def prove_builtin([:write,x],y,env,def,n) do
+    x1 = deref(x,env)
+    IO.puts(x1)
+    prove_all(y,env,def,n+1)
+  end
+  def prove_builtin([:assert,x],y,env,def,n) do
+    if is_pred(x) do
+      [_,[name|_]] = x
+      def1 = find_def(def,name)
+      def2 = [{name,[x|def1]}]
+      prove_all(y,env,def2,n+1)
+    end
+  end
+
+  def find_def(ls,name) do
+    def = ls[name]
+    if def == nil do
+      []
+    else
+      def
+    end
+  end
+
+  def prove_all([],env,def,_) do {true,env,def} end
+  def prove_all([x|xs],env,def,n) do
+    prove(x,xs,env,def,n)
+  end
+
+  #derefirence
+  def deref(_,[]) do false end
+  def deref(x,[[x,v]|_]) do v end
+  def deref(x,[_|es]) do
+    deref(x,es)
+  end
+
+  def is_pred([:pred,_]) do true end
+  def is_pred(_) do false end
+
+  def is_clause([:clause,_]) do true end
+  def is_clause(_) do false end
+
+  def is_builtin([:builtin,_]) do true end
+  def is_builtin(_) do false end
+
+  def  is_var(x) do
+    if is_atomvar(x) || is_variant(x) do
+      true
+    else
+      false
+    end
+  end
+  # atom vairable
+  def is_atomvar(x) do
+    x1 = x |> Atom.to_charlist |> Enum.at(0)
+    cond do
+      x1 == 95 -> true  #under bar
+      x1 >= 65 && x1 <= 90 -> true #uppercase
+      true -> false
+    end
+  end
+
+  # variant variable
+  def is_variant([x,y]) when is_integer(y) do
+    if is_atomvar(x) do
+      true
+    else
+      false
+    end
+  end
+  def is_variant(_) do false end
+
+  #clause head
+  def head([:clause,h,_]) do h end
+  #clause body
+  def body([:clause,_,b]) do b end
+
+  #alpha convert :X -> [:X,n]
+  def alpha_conv([],_) do [] end
+  def alpha_conv([x|y],n) when is_atom(x) do
+    if is_atomvar(x) do
+      [[x,n]|alpha_conv(y,n)]
+    else
+      [x|alpha_conv(y,n)]
+    end
+  end
+  def alpha_conv([x|y],n) when is_number(x) do
+    [x|alpha_conv(y,n)]
+  end
+  def alpha_conv([x|y],n) when is_list(x) do
+    [alpha_conv(x,n)|alpha_conv(y,n)]
+  end
+
+  def unify([],[],env) do env end
+  def unify([x|xs],[y|ys],env) do
+    x1 = deref(x,env)
+    y1 = deref(y,env)
+    cond do
+      is_var(x1) && !is_var(y1) -> unify(xs,ys,[[x1,y1]|env])
+      !is_var(x1) && is_var(y1) -> unify(xs,ys,[[y1,x1]|env])
+      is_var(x1) && is_var(y1) -> unify(xs,ys,[[x1,y1]|env])
+      x1 == y1 -> unify(xs,ys,env)
+      true -> false
+    end
+  end
+
 end
+
 
 #----------------print------------
 defmodule Print do
@@ -243,7 +398,7 @@ defmodule Print do
     IO.puts("nil")
   end
   defp print_list([x|xs]) do
-    IO.write("(")
+    IO.write("[")
     print(x)
     if xs != [] do
       IO.write(" ")
@@ -252,22 +407,22 @@ defmodule Print do
   end
 
   defp print_list1(x) when is_atom(x)do
-    IO.write(".")
+    IO.write("|")
     print(x)
-    IO.puts(")")
+    IO.puts("]")
   end
   defp print_list1(x) when is_number(x)do
-    IO.write(". ")
+    IO.write("|")
     print(x)
-    IO.puts(")")
+    IO.puts("]")
   end
   defp print_list1([]) do
-    IO.puts(")")
+    IO.puts("]")
   end
   defp print_list1([x|xs]) do
     print(x)
     if xs != [] do
-      IO.write(" ")
+      IO.write(",")
     end
     print_list1(xs)
   end
