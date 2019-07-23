@@ -76,10 +76,10 @@ defmodule Read do
   def read([x,"("|xs]) do
     name = String.to_atom(x)
     {tuple,rest} = read_tuple(xs,[])
-    if is_builtin(name) do
-      {[:builtin,[name|tuple]],rest}
-    else
-      {[:pred,[name|tuple]],rest}
+    cond do
+      is_builtin(name) -> {[:builtin,[name|tuple]],rest}
+      is_func(name) -> {[name|tuple],rest}
+      true -> {[:pred,[name|tuple]],rest}
     end
   end
   def read([x,"."|_]) do
@@ -280,13 +280,18 @@ defmodule Read do
   def is_builtin(x) do
     Enum.member?([:assert,:halt,:write,:nl,:is,:listing,:=,:>,:<,:"=>",:"=<"],x)
   end
+
+  def is_func(x) do
+    Enum.member?([:+,:-,:*,:/,:^],x)
+  end
+
 end
 
   #----------------prove-------------
 defmodule Prove do
   def prove([:pred,x],y,env,def,n) do
     [name|_] = x
-    def1 = def[name]
+    def1 = def[name] |> Enum.reverse()
     prove_pred([:pred,x],def1,y,env,def,n)
   end
   def prove([:builtin,x],y,env,def,n) do
@@ -296,11 +301,25 @@ defmodule Prove do
   def prove_pred(_,nil,_,env,def,_) do {false,env,def} end
   def prove_pred(_,[],_,env,def,_) do {false,env,def} end
   def prove_pred(x,[d|ds],y,env,def,n) do
+    #IO.inspect(x)
+    #IO.inspect(env)
+    #IO.gets("??")
     d1 = alpha_conv(d,n)
-    cond do
-      is_pred(d1) && unify(x,d1,env) -> prove_all(y,env,def,n+1)
-      is_clause(d1) && unify(x,head(d1),env) -> prove_all([body(d1)|y],env,def,n+1)
-      true -> prove_pred(x,ds,y,env,def,n)
+    if is_pred(d1) do
+      env1 = unify(x,d1,env)
+      if env1 != false do
+        prove_all(y,env1,def,n+1)
+      else
+        prove_pred(x,ds,y,env,def,n)
+      end
+    else if is_clause(d1) do
+      env1 = unify(x,head(d1),env)
+      if env1 != false do
+        prove_all(body(d1)++y,env1,def,n+1)
+      else
+        prove_pred(x,ds,y,env,def,n)
+      end
+    end
     end
   end
 
@@ -330,8 +349,9 @@ defmodule Prove do
       prove_all(y,env,def2,n+1)
     end
   end
-  def prove_builtin([:is,x1,x2],y,env,def,n) do
-    prove_all(y,unify(x1,x2,env),def,n+1)
+  def prove_builtin([:is,a,b],y,env,def,n) do
+    b1 = eval(b,env)
+    prove_all(y,unify(a,b1,env),def,n+1)
   end
   def prove_builtin([:listing],y,env,def,n) do
     listing(def,[])
@@ -339,6 +359,26 @@ defmodule Prove do
   end
   def prove_builtin(_,_,_,_,_) do
     throw "error builtin"
+  end
+
+  def eval(x,_) when is_number(x) do x end
+  def eval(x,env) when is_atom(x) do
+     deref(x,env)
+  end
+  def eval([:+,x,y],env) do
+    eval(x,env) + eval(y,env)
+  end
+  def eval([:-,x,y],env) do
+    eval(x,env) - eval(y,env)
+  end
+  def eval([:*,x,y],env) do
+    eval(x,env) * eval(y,env)
+  end
+  def eval([:/,x,y],env) do
+    eval(x,env) / eval(y,env)
+  end
+  def eval(x,env) do
+    deref(x,env)
   end
 
   def listing([],_) do true end
@@ -391,7 +431,7 @@ defmodule Prove do
   def is_pred([:pred,_]) do true end
   def is_pred(_) do false end
 
-  def is_clause([:clause,_]) do true end
+  def is_clause([:clause,_,_]) do true end
   def is_clause(_) do false end
 
   def is_builtin([:builtin,_]) do true end
