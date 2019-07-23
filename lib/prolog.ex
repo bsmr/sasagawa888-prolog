@@ -8,9 +8,15 @@ defmodule Prolog do
     try do
       IO.write("?- ")
       {s,buf1} = Read.parse(buf)
-      {s1,env1,def1} = Prove.prove(s,env,buf,def,1)
-      Print.print(s1)
-      repl1(env1,buf1,def1)
+      if Prove.is_pred(s) || Prove.is_builtin(s) do
+        {s1,env1,def1} = Prove.prove(s,env,buf,def,1)
+        Print.print(s1)
+        repl1(env1,buf1,def1)
+      else
+        {s1,env1,def1} = Prove.prove_all(s,env,def,1)
+        Print.print(s1)
+        repl1(env1,buf1,def1)
+      end
     catch
       x -> IO.puts(x)
       if x != "goodbye" do
@@ -30,8 +36,12 @@ defmodule Read do
     else if s2 == :":-" do
       {s3,buf3} = parse1(buf2,[])
       {[:clause,s1,s3],buf3}
+    else if s2 == :',' do
+      {s3,buf3} = parse1(buf2,[s1])
+      {s3,buf3}
     else
       throw "error parse1"
+    end
     end
     end
   end
@@ -41,6 +51,7 @@ defmodule Read do
     {s2,buf2} = read(buf1)
     cond do
       s2 == :. -> {res++[s1],buf2}
+      s2 == :")" -> {res++[s1],buf2}
       s2 == :"," -> parse1(buf2,res++[s1])
       true -> throw "error parse2"
     end
@@ -55,6 +66,9 @@ defmodule Read do
   end
   def read(["."|xs]) do
     {:.,xs}
+  end
+  def read([")"|xs]) do
+    {:")",xs}
   end
   def read(["["|xs]) do
     read_list(xs,[])
@@ -75,7 +89,14 @@ defmodule Read do
     else
       {[:pred,[name]],["."]}
     end
-
+  end
+  def read([x,","|xs]) do
+    name = String.to_atom(x)
+    cond do
+      is_builtin(name) -> {[:builtin,[name]],[","|xs]}
+      is_atom_str(x) -> {[:pred,[name]],[","|xs]}
+      true -> {name,[","|xs]}
+    end
   end
   def read([x|xs]) do
     cond do
@@ -85,6 +106,17 @@ defmodule Read do
       true -> {String.to_atom(x),xs}
     end
   end
+
+  # for read_list (read simply)
+  def read1(x) do
+    cond do
+      is_integer_str(x) -> String.to_integer(x)
+      is_float_str(x) -> String.to_float(x)
+      x == "nil" -> nil
+      true -> String.to_atom(x)
+    end
+  end
+
 
   defp read_list([],ls) do
     buf = IO.gets("") |> comment_line |> drop_eol |> tokenize
@@ -109,16 +141,12 @@ defmodule Read do
     end
   end
   defp read_list([x,","|xs],ls) do
-    {s,_} = read([x])
+    s = read1(x)
     read_list(xs,ls++[s])
   end
   defp read_list([x,"]"|xs],ls) do
-    {s,_} = read([x])
+    s = read1(x)
     {ls++[s],xs}
-  end
-  defp read_list(x,ls) do
-    {s,rest} = read(x)
-    read_list(rest,ls++[s])
   end
 
   defp read_tuple([],ls) do
@@ -129,7 +157,7 @@ defmodule Read do
     {ls,xs}
   end
   defp read_tuple(["("|xs],ls) do
-    {s,rest} = read_tuple(xs,[])
+    {s,rest} = parse(xs)
     read_tuple(rest,ls++[s])
   end
   defp read_tuple([""|xs],ls) do
@@ -238,8 +266,19 @@ defmodule Read do
     end
   end
 
+  # lowercase or number char or underbar
+  def is_atom_str(x) do
+    y = String.to_charlist(x)
+    if hd(y) >= 97 && hd(y) <= 122 &&
+       Enum.all?(y,fn(z) -> (z >= 97 && z <=122) || (z >= 48  && z <= 57) || z == 95 end) do
+         true
+    else
+        false
+    end
+  end
+
   def is_builtin(x) do
-    Enum.member?([:assert,:halt,:write,:nl,:is,:=,:>,:<,:"=>",:"=<"],x)
+    Enum.member?([:assert,:halt,:write,:nl,:is,:listing,:=,:>,:<,:"=>",:"=<"],x)
   end
 end
 
@@ -281,10 +320,43 @@ defmodule Prove do
     if is_pred(x) do
       [_,[name|_]] = x
       def1 = find_def(def,name)
-      def2 = [{name,[x|def1]}]
+      def2 = [{name,[x|def1]}|def]
+      prove_all(y,env,def2,n+1)
+    else
+      #clause
+      [_,[_,[name|_]],_] = x
+      def1 = find_def(def,name)
+      def2 = [{name,[x|def1]}|def]
       prove_all(y,env,def2,n+1)
     end
   end
+  def prove_builtin([:is,x1,x2],y,env,def,n) do
+    prove_all(y,unify(x1,x2,env),def,n+1)
+  end
+  def prove_builtin([:listing],y,env,def,n) do
+    listing(def,[])
+    prove_all(y,env,def,n+1)
+  end
+  def prove_builtin(_,_,_,_,_) do
+    throw "error builtin"
+  end
+
+  def listing([],_) do true end
+  def listing([{key,body}|rest],check) do
+    if Enum.member?(check,key) do
+      listing(rest,check)
+    else
+      listing1(Enum.reverse(body))
+      listing(rest,[key|check])
+    end
+  end
+
+  def listing1([]) do true end
+  def listing1([x|xs]) do
+    Print.print(x)
+    listing1(xs)
+  end
+
 
   def find_def(ls,name) do
     def = ls[name]
@@ -387,6 +459,10 @@ defmodule Prove do
       true -> false
     end
   end
+  # atom or number
+  def unify(x,y,env) do
+    unify([x],[y],env)
+  end
 
   def unify1(x,y,xs,ys,env) do
     env1 = unify(x,y,env)
@@ -429,7 +505,7 @@ defmodule Print do
   end
   defp print_list([x|xs]) do
     IO.write("[")
-    print(x)
+    print1(x)
     if xs != [] do
       IO.write(" ")
     end
@@ -438,19 +514,19 @@ defmodule Print do
 
   defp print_list1(x) when is_atom(x)do
     IO.write("|")
-    print(x)
-    IO.puts("]")
+    print1(x)
+    IO.write("]")
   end
   defp print_list1(x) when is_number(x)do
     IO.write("|")
-    print(x)
-    IO.puts("]")
+    print1(x)
+    IO.write("]")
   end
   defp print_list1([]) do
-    IO.puts("]")
+    IO.write("]")
   end
   defp print_list1([x|xs]) do
-    print(x)
+    print1(x)
     if xs != [] do
       IO.write(",")
     end
