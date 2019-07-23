@@ -31,7 +31,7 @@ defmodule Read do
       {s3,buf3} = parse1(buf2,[])
       {[:clause,s1,s3],buf3}
     else
-      throw "error"
+      throw "error parse1"
     end
     end
   end
@@ -42,7 +42,7 @@ defmodule Read do
     cond do
       s2 == :. -> {res++[s1],buf2}
       s2 == :"," -> parse1(buf2,res++[s1])
-      true -> throw "error parse1"
+      true -> throw "error parse2"
     end
   end
 
@@ -239,7 +239,7 @@ defmodule Read do
   end
 
   def is_builtin(x) do
-    Enum.member?([:assert,:halt,:write],x)
+    Enum.member?([:assert,:halt,:write,:nl,:is,:=,:>,:<,:"=>",:"=<"],x)
   end
 end
 
@@ -270,7 +270,11 @@ defmodule Prove do
   end
   def prove_builtin([:write,x],y,env,def,n) do
     x1 = deref(x,env)
-    IO.puts(x1)
+    Print.print1(x1)
+    prove_all(y,env,def,n+1)
+  end
+  def prove_builtin([:nl],y,env,def,n) do
+    IO.puts("")
     prove_all(y,env,def,n+1)
   end
   def prove_builtin([:assert,x],y,env,def,n) do
@@ -398,19 +402,27 @@ end
 
 #----------------print------------
 defmodule Print do
-  def print(x) when is_number(x) do
-    IO.puts(x)
+  def print(x) do
+    print1(x)
+    IO.puts("")
   end
-  def print(x) when is_atom(x) do
+
+  def print1(x) when is_number(x) do
+    IO.write(x)
+  end
+  def print1(x) when is_atom(x) do
     if x != nil do
-      IO.puts(x)
+      IO.write(x)
     else
-      IO.puts("nil")
+      IO.write("nil")
     end
   end
-  def print(x) when is_list(x) do
+  def print1(x) when is_list(x) do
     print_list(x)
   end
+
+
+
 
   defp print_list([]) do
     IO.puts("nil")
