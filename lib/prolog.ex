@@ -26,7 +26,7 @@ defmodule Read do
   def parse(buf) do
     {s1,buf1} = read(buf)
     {s2,buf2} = read(buf1)
-    if s2 == :. do {s1,buf2}
+    if s2 == :. do {s1,[]}
     else if s2 == :":-" do
       {s3,buf3} = parse1(buf2,[])
       {[:clause,s1,s3],buf3}
@@ -248,7 +248,7 @@ defmodule Prove do
   def prove([:pred,x],y,env,def,n) do
     [name|_] = x
     def1 = def[name]
-    prove_pred(x,def1,y,env,def,n)
+    prove_pred([:pred,x],def1,y,env,def,n)
   end
   def prove([:builtin,x],y,env,def,n) do
     prove_builtin(x,y,env,def,n)
@@ -258,13 +258,11 @@ defmodule Prove do
   def prove_pred(_,[],_,env,def,_) do {false,env,def} end
   def prove_pred(x,[d|ds],y,env,def,n) do
     d1 = alpha_conv(d,n)
-    if is_pred(d1) && unify(x,d1,env) do
-      prove_all(y,env,def,n+1)
+    cond do
+      is_pred(d1) && unify(x,d1,env) -> prove_all(y,env,def,n+1)
+      is_clause(d1) && unify(x,head(d1),env) -> prove_all([body(d1)|y],env,def,n+1)
+      true -> prove_pred(x,ds,y,env,def,n)
     end
-    if is_clause(d1) && unify(x,head(d1),env) do
-      prove_all([body(d1)|y],env,def,n+1)
-    end
-    prove_pred(x,ds,y,env,def,n)
   end
 
   def prove_builtin([:halt],_,_,_,_) do
@@ -299,10 +297,19 @@ defmodule Prove do
   end
 
   #derefirence
-  def deref(_,[]) do false end
-  def deref(x,[[x,v]|_]) do v end
-  def deref(x,[_|es]) do
-    deref(x,es)
+  def deref(x,env) do
+    x1 = deref1(x,env)
+    if x1 == false do
+      x
+    else
+      x1
+    end
+  end
+
+  def deref1(_,[]) do false end
+  def deref1(x,[[x,v]|_]) do v end
+  def deref1(x,[_|es]) do
+    deref1(x,es)
   end
 
   def is_pred([:pred,_]) do true end
@@ -322,7 +329,7 @@ defmodule Prove do
     end
   end
   # atom vairable
-  def is_atomvar(x) do
+  def is_atomvar(x) when is_atom(x) do
     x1 = x |> Atom.to_charlist |> Enum.at(0)
     cond do
       x1 == 95 -> true  #under bar
@@ -330,6 +337,7 @@ defmodule Prove do
       true -> false
     end
   end
+  def is_atomvar(_) do false end
 
   # variant variable
   def is_variant([x,y]) when is_integer(y) do
@@ -370,8 +378,18 @@ defmodule Prove do
       is_var(x1) && !is_var(y1) -> unify(xs,ys,[[x1,y1]|env])
       !is_var(x1) && is_var(y1) -> unify(xs,ys,[[y1,x1]|env])
       is_var(x1) && is_var(y1) -> unify(xs,ys,[[x1,y1]|env])
+      is_list(x1) && is_list(y1) -> unify1(x1,y1,xs,ys,env)
       x1 == y1 -> unify(xs,ys,env)
       true -> false
+    end
+  end
+
+  def unify1(x,y,xs,ys,env) do
+    env1 = unify(x,y,env)
+    if env1 != false do
+      unify(xs,ys,env1)
+    else
+      false
     end
   end
 
