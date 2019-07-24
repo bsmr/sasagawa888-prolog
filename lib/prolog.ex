@@ -1,26 +1,29 @@
+# assert((fact(N,A) :- is(N1,-(N,1)),fact(N1,A1),is(A,*(N,A1)))).
+
+
 defmodule Prolog do
   def repl() do
     IO.puts("Prolog in Elixir")
-    repl1([],[],[])
+    repl1([])
   end
 
-  defp repl1(env,buf,def) do
+  defp repl1(def) do
     try do
       IO.write("?- ")
-      {s,buf1} = Read.parse(buf)
+      {s,buf} = Read.parse([])
       if Prove.is_pred(s) || Prove.is_builtin(s) do
-        {s1,env1,def1} = Prove.prove(s,env,buf,def,1)
+        {s1,_,def1} = Prove.prove(s,[],buf,def,1)
         Print.print(s1)
-        repl1(env1,buf1,def1)
+        repl1(def1)
       else
-        {s1,env1,def1} = Prove.prove_all(s,env,def,1)
+        {s1,_,def1} = Prove.prove_all(s,[],def,1)
         Print.print(s1)
-        repl1(env1,buf1,def1)
+        repl1(def1)
       end
     catch
       x -> IO.puts(x)
       if x != "goodbye" do
-        repl1(env,buf,def)
+        repl1(def)
       else
         true
       end
@@ -291,7 +294,7 @@ end
 defmodule Prove do
   def prove([:pred,x],y,env,def,n) do
     [name|_] = x
-    def1 = def[name] |> Enum.reverse()
+    def1 = def[name]
     prove_pred([:pred,x],def1,y,env,def,n)
   end
   def prove([:builtin,x],y,env,def,n) do
@@ -301,10 +304,12 @@ defmodule Prove do
   def prove_pred(_,nil,_,env,def,_) do {false,env,def} end
   def prove_pred(_,[],_,env,def,_) do {false,env,def} end
   def prove_pred(x,[d|ds],y,env,def,n) do
-    #IO.inspect(x)
-    #IO.inspect(env)
-    #IO.gets("??")
     d1 = alpha_conv(d,n)
+    #IO.inspect(x)
+    #IO.inspect(d1)
+    #IO.inspect(env)
+    #IO.inspect(y)
+    #IO.gets("??")
     if is_pred(d1) do
       env1 = unify(x,d1,env)
       if env1 != false do
@@ -339,19 +344,20 @@ defmodule Prove do
     if is_pred(x) do
       [_,[name|_]] = x
       def1 = find_def(def,name)
-      def2 = [{name,[x|def1]}|def]
+      def2 = [{name,def1++[x]}|def]
       prove_all(y,env,def2,n+1)
     else
       #clause
       [_,[_,[name|_]],_] = x
       def1 = find_def(def,name)
-      def2 = [{name,[x|def1]}|def]
+      def2 = [{name,def1++[x]}|def]
       prove_all(y,env,def2,n+1)
     end
   end
   def prove_builtin([:is,a,b],y,env,def,n) do
     b1 = eval(b,env)
-    prove_all(y,unify(a,b1,env),def,n+1)
+    env1 = unify(a,b1,env)
+    prove_all(y,env1,def,n+1)
   end
   def prove_builtin([:listing],y,env,def,n) do
     listing(def,[])
@@ -386,7 +392,7 @@ defmodule Prove do
     if Enum.member?(check,key) do
       listing(rest,check)
     else
-      listing1(Enum.reverse(body))
+      listing1(body)
       listing(rest,[key|check])
     end
   end
@@ -414,7 +420,7 @@ defmodule Prove do
 
   #derefirence
   def deref(x,env) do
-    x1 = deref1(x,env)
+    x1 = deref1(x,env,env)
     if x1 == false do
       x
     else
@@ -422,10 +428,31 @@ defmodule Prove do
     end
   end
 
-  def deref1(_,[]) do false end
-  def deref1(x,[[x,v]|_]) do v end
-  def deref1(x,[_|es]) do
-    deref1(x,es)
+  def test(x) do
+    env =  [[[:A, 5], 1],
+      [[:A1, 5], 1],
+  [[:N1, 5], 0],
+  [[:A1, 3], [:A, 5]],
+  [[:N, 5], 1],
+  [[:N1, 3], 1],
+  [[:A1, 1], [:A, 3]],
+  [[:N, 3], 2],
+  [[:N1, 1], 2],
+  [:X, [:A, 1]],
+  [[:N, 1], 3]]
+    deref(x,env)
+  end
+
+  def deref1(_,[],_) do false end
+  def deref1(x,[[x,v]|_],env) do
+    if !is_var(v) do
+      v
+    else
+      deref1(v,env,env)
+    end
+  end
+  def deref1(x,[_|es],env) do
+    deref1(x,es,env)
   end
 
   def is_pred([:pred,_]) do true end
