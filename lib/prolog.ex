@@ -37,13 +37,19 @@ defmodule Prolog do
 
   def add_ask(x) do
     ask = [:builtin,[:ask|find_var(x,[])]]
-    if Prove.is_pred(x) || Prove.is_builtin(x) do
+    if is_assert(x) do
+      [x]
+    else if Prove.is_pred(x) || Prove.is_builtin(x) do
       [x] ++ [ask]
     else
       # conjunction
       x ++ [ask]
     end
+    end
   end
+
+  def is_assert([:builtin,[:assert|_]]) do true end
+  def is_assert(_) do false end
 
 end
 
