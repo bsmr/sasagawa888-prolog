@@ -599,20 +599,40 @@ defmodule Print do
     end
   end
   def print1(x) when is_list(x) do
-    print_list(x)
+    cond do
+      Prove.is_pred(x) -> print_pred(x)
+      Prove.is_builtin(x) -> print_pred(x)
+      Prove.is_clause(x) -> print_clause(x)
+      true -> print_list(x)
+    end
+  end
+
+  def print_pred([_,[name|args]]) do
+    IO.write(name)
+    print_tuple(args)
+  end
+
+  def print_clause([_,head,body]) do
+    print_pred(head)
+    IO.write(" :- ")
+    print_body(body)
+  end
+
+  def print_body([]) do true end
+  def print_body([x|xs]) do
+    print_pred(x)
+    print_body(xs)
   end
 
 
-
-
   defp print_list([]) do
-    IO.puts("nil")
+    IO.puts("[]")
   end
   defp print_list([x|xs]) do
     IO.write("[")
     print1(x)
     if xs != [] do
-      IO.write(" ")
+      IO.write(",")
     end
     print_list1(xs)
   end
@@ -637,4 +657,28 @@ defmodule Print do
     end
     print_list1(xs)
   end
+
+  defp print_tuple([]) do
+    true
+  end
+  defp print_tuple([x|xs]) do
+    IO.write("(")
+    print1(x)
+    if xs != [] do
+      IO.write(",")
+    end
+    print_tuple1(xs)
+  end
+  defp print_tuple1([]) do
+    IO.write(")")
+  end
+  defp print_tuple1([x|xs]) do
+    print1(x)
+    if xs != [] do
+      IO.write(",")
+    end
+    print_tuple1(xs)
+  end
+
+
 end
