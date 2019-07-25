@@ -28,7 +28,7 @@ defmodule Prolog do
     find_var(xs,res1++res)
   end
   def find_var([x|xs],res) do
-    if is_var(x) do
+    if is_var(x) && !Enum.member?(res,x) do
       find_var(xs,[x|res])
     else
       find_var(xs,res)
