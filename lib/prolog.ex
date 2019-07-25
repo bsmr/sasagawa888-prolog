@@ -28,7 +28,7 @@ defmodule Prolog do
     find_var(xs,res1++res)
   end
   def find_var([x|xs],res) do
-    if Prove.is_var(x) do
+    if is_var(x) do
       find_var(xs,[x|res])
     else
       find_var(xs,res)
@@ -39,7 +39,7 @@ defmodule Prolog do
     ask = [:builtin,[:ask|find_var(x,[])]]
     if is_assert(x) do
       [x]
-    else if Prove.is_pred(x) || Prove.is_builtin(x) do
+    else if is_pred(x) || is_builtin(x) do
       [x] ++ [ask]
     else
       # conjunction
@@ -48,6 +48,45 @@ defmodule Prolog do
     end
   end
 
+  #-------------data type------------
+  def is_pred([:pred,_]) do true end
+  def is_pred(_) do false end
+
+  def is_clause([:clause,_,_]) do true end
+  def is_clause(_) do false end
+
+  def is_builtin([:builtin,_]) do true end
+  def is_builtin(_) do false end
+
+  def  is_var(x) do
+    if is_atomvar(x) || is_variant(x) do
+      true
+    else
+      false
+    end
+  end
+  # atom vairable
+  def is_atomvar(x) when is_atom(x) do
+    x1 = x |> Atom.to_charlist |> Enum.at(0)
+    cond do
+      x1 == 95 -> true  #under bar
+      x1 >= 65 && x1 <= 90 -> true #uppercase
+      true -> false
+    end
+  end
+  def is_atomvar(_) do false end
+
+  # variant variable
+  def is_variant([x,y]) when is_integer(y) do
+    if is_atomvar(x) do
+      true
+    else
+      false
+    end
+  end
+  def is_variant(_) do false end
+
+  # assert builtin
   def is_assert([:builtin,[:assert|_]]) do true end
   def is_assert(_) do false end
 
@@ -102,14 +141,14 @@ defmodule Read do
     name = String.to_atom(x)
     {tuple,rest} = read_tuple(xs,[])
     cond do
-      is_builtin(name) -> {[:builtin,[name|tuple]],rest}
-      is_func(name) -> {[name|tuple],rest}
+      is_builtin_atom(name) -> {[:builtin,[name|tuple]],rest}
+      is_func_atom(name) -> {[name|tuple],rest}
       true -> {[:pred,[name|tuple]],rest}
     end
   end
   def read([x,"."|_]) do
     name = String.to_atom(x)
-    if is_builtin(name) do
+    if is_builtin_atom(name) do
       {[:builtin,[name]],["."]}
     else
       {[:pred,[name]],["."]}
@@ -118,7 +157,7 @@ defmodule Read do
   def read([x,","|xs]) do
     name = String.to_atom(x)
     cond do
-      is_builtin(name) -> {[:builtin,[name]],[","|xs]}
+      is_builtin_atom(name) -> {[:builtin,[name]],[","|xs]}
       is_atom_str(x) -> {[:pred,[name]],[","|xs]}
       true -> {name,[","|xs]}
     end
@@ -302,11 +341,11 @@ defmodule Read do
     end
   end
 
-  def is_builtin(x) do
+  def is_builtin_atom(x) do
     Enum.member?([:assert,:halt,:write,:nl,:is,:listing,:ask,:=,:>,:<,:"=>",:"=<"],x)
   end
 
-  def is_func(x) do
+  def is_func_atom(x) do
     Enum.member?([:+,:-,:*,:/,:^],x)
   end
 
@@ -337,7 +376,7 @@ defmodule Prove do
     #IO.inspect(env)
     #IO.inspect(y)
     #IO.gets("??")
-    if is_pred(d1) do
+    if Prolog.is_pred(d1) do
       env1 = unify(x,d1,env)
       if env1 != false do
         {res,env2,def} = prove_all(y,env1,def,n+1)
@@ -349,7 +388,7 @@ defmodule Prove do
       else
         prove_pred(x,ds,y,env,def,n)
       end
-    else if is_clause(d1) do
+    else if Prolog.is_clause(d1) do
       env1 = unify(x,head(d1),env)
       if env1 != false do
         {res,env2,def} = prove_all(body(d1)++y,env1,def,n+1)
@@ -378,7 +417,7 @@ defmodule Prove do
     prove_all(y,env,def,n+1)
   end
   def prove_builtin([:assert,x],y,env,def,n) do
-    if is_pred(x) do
+    if Prolog.is_pred(x) do
       [_,[name|_]] = x
       def1 = find_def(def,name)
       def2 = [{name,def1++[x]}|def]
@@ -483,7 +522,7 @@ defmodule Prove do
 
   def deref1(_,[],_) do false end
   def deref1(x,[[x,v]|_],env) do
-    if !is_var(v) do
+    if !Prolog.is_var(v) do
       v
     else
       deref1(v,env,env)
@@ -493,43 +532,6 @@ defmodule Prove do
     deref1(x,es,env)
   end
 
-  def is_pred([:pred,_]) do true end
-  def is_pred(_) do false end
-
-  def is_clause([:clause,_,_]) do true end
-  def is_clause(_) do false end
-
-  def is_builtin([:builtin,_]) do true end
-  def is_builtin(_) do false end
-
-  def  is_var(x) do
-    if is_atomvar(x) || is_variant(x) do
-      true
-    else
-      false
-    end
-  end
-  # atom vairable
-  def is_atomvar(x) when is_atom(x) do
-    x1 = x |> Atom.to_charlist |> Enum.at(0)
-    cond do
-      x1 == 95 -> true  #under bar
-      x1 >= 65 && x1 <= 90 -> true #uppercase
-      true -> false
-    end
-  end
-  def is_atomvar(_) do false end
-
-  # variant variable
-  def is_variant([x,y]) when is_integer(y) do
-    if is_atomvar(x) do
-      true
-    else
-      false
-    end
-  end
-  def is_variant(_) do false end
-
   #clause head
   def head([:clause,h,_]) do h end
   #clause body
@@ -538,7 +540,7 @@ defmodule Prove do
   #alpha convert :X -> [:X,n]
   def alpha_conv([],_) do [] end
   def alpha_conv([x|y],n) when is_atom(x) do
-    if is_atomvar(x) do
+    if Prolog.is_atomvar(x) do
       [[x,n]|alpha_conv(y,n)]
     else
       [x|alpha_conv(y,n)]
@@ -556,9 +558,9 @@ defmodule Prove do
     x1 = deref(x,env)
     y1 = deref(y,env)
     cond do
-      is_var(x1) && !is_var(y1) -> unify(xs,ys,[[x1,y1]|env])
-      !is_var(x1) && is_var(y1) -> unify(xs,ys,[[y1,x1]|env])
-      is_var(x1) && is_var(y1) -> unify(xs,ys,[[x1,y1]|env])
+      Prolog.is_var(x1) && !Prolog.is_var(y1) -> unify(xs,ys,[[x1,y1]|env])
+      !Prolog.is_var(x1) && Prolog.is_var(y1) -> unify(xs,ys,[[y1,x1]|env])
+      Prolog.is_var(x1) && Prolog.is_var(y1) -> unify(xs,ys,[[x1,y1]|env])
       is_list(x1) && is_list(y1) -> unify1(x1,y1,xs,ys,env)
       x1 == y1 -> unify(xs,ys,env)
       true -> false
@@ -600,9 +602,9 @@ defmodule Print do
   end
   def print1(x) when is_list(x) do
     cond do
-      Prove.is_pred(x) -> print_pred(x)
-      Prove.is_builtin(x) -> print_pred(x)
-      Prove.is_clause(x) -> print_clause(x)
+      Prolog.is_pred(x) -> print_pred(x)
+      Prolog.is_builtin(x) -> print_pred(x)
+      Prolog.is_clause(x) -> print_clause(x)
       true -> print_list(x)
     end
   end
