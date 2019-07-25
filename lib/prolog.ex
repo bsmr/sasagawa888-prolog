@@ -1,6 +1,3 @@
-# assert((fact(N,A) :- is(N1,-(N,1)),fact(N1,A1),is(A,*(N,A1)))).
-
-
 defmodule Prolog do
   def repl() do
     IO.puts("Prolog in Elixir")
@@ -10,16 +7,11 @@ defmodule Prolog do
   defp repl1(def) do
     try do
       IO.write("?- ")
-      {s,buf} = Read.parse([])
-      if Prove.is_pred(s) || Prove.is_builtin(s) do
-        {s1,_,def1} = Prove.prove(s,[],buf,def,1)
-        Print.print(s1)
-        repl1(def1)
-      else
-        {s1,_,def1} = Prove.prove_all(s,[],def,1)
-        Print.print(s1)
-        repl1(def1)
-      end
+      {s,_} = Read.parse([])
+      s1 = add_ask(s)
+      {s2,_,def1} = Prove.prove_all(s1,[],def,1)
+      Print.print(s2)
+      repl1(def1)
     catch
       x -> IO.puts(x)
       if x != "goodbye" do
@@ -29,6 +21,30 @@ defmodule Prolog do
       end
     end
   end
+
+  def find_var([],res) do Enum.reverse(res) end
+  def find_var([x|xs],res) when is_list(x) do
+    res1 = find_var(x,res)
+    find_var(xs,res1++res)
+  end
+  def find_var([x|xs],res) do
+    if Prove.is_var(x) do
+      find_var(xs,[x|res])
+    else
+      find_var(xs,res)
+    end
+  end
+
+  def add_ask(x) do
+    ask = [:builtin,[:ask|find_var(x,[])]]
+    if Prove.is_pred(x) || Prove.is_builtin(x) do
+      [x] ++ [ask]
+    else
+      # conjunction
+      x ++ [ask]
+    end
+  end
+
 end
 
 defmodule Read do
@@ -281,7 +297,7 @@ defmodule Read do
   end
 
   def is_builtin(x) do
-    Enum.member?([:assert,:halt,:write,:nl,:is,:listing,:=,:>,:<,:"=>",:"=<"],x)
+    Enum.member?([:assert,:halt,:write,:nl,:is,:listing,:ask,:=,:>,:<,:"=>",:"=<"],x)
   end
 
   def is_func(x) do
@@ -301,6 +317,11 @@ defmodule Prove do
     prove_builtin(x,y,env,def,n)
   end
 
+  def prove_all([],env,def,_) do {true,env,def} end
+  def prove_all([x|xs],env,def,n) do
+    prove(x,xs,env,def,n)
+  end
+
   def prove_pred(_,nil,_,env,def,_) do {false,env,def} end
   def prove_pred(_,[],_,env,def,_) do {false,env,def} end
   def prove_pred(x,[d|ds],y,env,def,n) do
@@ -313,14 +334,24 @@ defmodule Prove do
     if is_pred(d1) do
       env1 = unify(x,d1,env)
       if env1 != false do
-        prove_all(y,env1,def,n+1)
+        {res,env2,def} = prove_all(y,env1,def,n+1)
+        if res == true do
+          {res,env2,def}
+        else
+          prove_pred(x,ds,y,env,def,n)
+        end
       else
         prove_pred(x,ds,y,env,def,n)
       end
     else if is_clause(d1) do
       env1 = unify(x,head(d1),env)
       if env1 != false do
-        prove_all(body(d1)++y,env1,def,n+1)
+        {res,env2,def} = prove_all(body(d1)++y,env1,def,n+1)
+        if res == true do
+          {res,env2,def}
+        else
+          prove_pred(x,ds,y,env,def,n)
+        end
       else
         prove_pred(x,ds,y,env,def,n)
       end
@@ -363,6 +394,18 @@ defmodule Prove do
     listing(def,[])
     prove_all(y,env,def,n+1)
   end
+  def prove_builtin([:ask],y,env,def,n) do
+    prove_all(y,env,def,n+1)
+  end
+  def prove_builtin([:ask|vars],y,env,def,n) do
+    ask(vars,env)
+    ans = IO.gets("")
+    cond do
+      ans == ".\n" -> prove_all(y,env,def,n+1)
+      ans == ";\n" -> {false,env,def}
+      true -> prove_all(y,env,def,n+1)
+    end
+  end
   def prove_builtin(_,_,_,_,_) do
     throw "error builtin"
   end
@@ -385,6 +428,14 @@ defmodule Prove do
   end
   def eval(x,env) do
     deref(x,env)
+  end
+
+  def ask([],_) do true end
+  def ask([x|xs],env) do
+    IO.write(x)
+    IO.write(" = ")
+    Print.print1(deref(x,env))
+    ask(xs,env)
   end
 
   def listing([],_) do true end
@@ -413,12 +464,8 @@ defmodule Prove do
     end
   end
 
-  def prove_all([],env,def,_) do {true,env,def} end
-  def prove_all([x|xs],env,def,n) do
-    prove(x,xs,env,def,n)
-  end
 
-  #derefirence
+  #dereference
   def deref(x,env) do
     x1 = deref1(x,env,env)
     if x1 == false do

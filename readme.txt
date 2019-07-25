@@ -7,7 +7,6 @@ $ mix prolog
 Compiling 1 file (.ex)
 Prolog in Elixir
 ?- assert(fact(0,1)).
-
 true
 ?- assert((fact(N,A) :- is(N1,-(N,1)),fact(N1,A1),is(A,*(N,A1)))).
 true
