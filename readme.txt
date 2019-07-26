@@ -12,6 +12,7 @@ builtin:
   nl/0
   assert/1
   is/2
+  =/2
   halt/0
 
 Example:

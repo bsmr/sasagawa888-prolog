@@ -359,7 +359,12 @@ defmodule Prove do
     prove_pred([:pred,x],def1,y,env,def,n)
   end
   def prove([:builtin,x],y,env,def,n) do
-    prove_builtin(x,y,env,def,n)
+    {res,env1,def1} = prove_builtin(x,y,env,def,n)
+    if res == false do
+      {res,env1,def1}
+    else
+      prove_all(y,env1,def1,n+1)
+    end
   end
 
   def prove_all([],env,def,_) do {true,env,def} end
@@ -404,6 +409,7 @@ defmodule Prove do
     end
   end
 
+
   def prove_builtin([:halt],_,_,_,_) do
     throw "goodbye"
   end
@@ -439,6 +445,14 @@ defmodule Prove do
     listing(def,[])
     prove_all(y,env,def,n+1)
   end
+  def prove_builtin([:=,a,b],y,env,def,n) do
+    env1 = unify(a,b,env)
+    if env1 == false do
+      {false,env,def}
+    else
+      prove_all(y,env1,def,n+1)
+    end
+  end
   def prove_builtin([:ask],y,env,def,n) do
     prove_all(y,env,def,n+1)
   end
@@ -451,7 +465,8 @@ defmodule Prove do
       true -> prove_all(y,env,def,n+1)
     end
   end
-  def prove_builtin(_,_,_,_,_) do
+  def prove_builtin(x,_,_,_,_) do
+    IO.inspect(x)
     throw "error builtin"
   end
 
@@ -623,6 +638,7 @@ defmodule Print do
   def print_body([]) do true end
   def print_body([x|xs]) do
     print_pred(x)
+    IO.write(",")
     print_body(xs)
   end
 
