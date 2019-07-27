@@ -359,12 +359,7 @@ defmodule Prove do
     prove_pred([:pred,x],def1,y,env,def,n)
   end
   def prove([:builtin,x],y,env,def,n) do
-    {res,env1,def1} = prove_builtin(x,y,env,def,n)
-    if res == false do
-      {res,env1,def1}
-    else
-      prove_all(y,env1,def1,n+1)
-    end
+    prove_builtin(x,y,env,def,n)
   end
 
   def prove_all([],env,def,_) do {true,env,def} end
@@ -451,6 +446,54 @@ defmodule Prove do
       {false,env,def}
     else
       prove_all(y,env1,def,n+1)
+    end
+  end
+  def prove_builtin([:>,a,b],y,env,def,n) do
+    a1 = eval(a,env)
+    b1 = eval(b,env)
+    if !is_number(a1) || !is_number(b1) do
+      throw "Error: > not number"
+    end
+    if a1 > b1 do
+      prove_all(y,env,def,n+1)
+    else
+      {false,env,def}
+    end
+  end
+  def prove_builtin([:"=>",a,b],y,env,def,n) do
+    a1 = eval(a,env)
+    b1 = eval(b,env)
+    if !is_number(a1) || !is_number(b1) do
+      throw "Error: => not number"
+    end
+    if a1 >= b1 do
+      prove_all(y,env,def,n+1)
+    else
+      {false,env,def}
+    end
+  end
+  def prove_builtin([:<,a,b],y,env,def,n) do
+    a1 = eval(a,env)
+    b1 = eval(b,env)
+    if !is_number(a1) || !is_number(b1) do
+      throw "Error: < not number"
+    end
+    if a1 < b1 do
+      prove_all(y,env,def,n+1)
+    else
+      {false,env,def}
+    end
+  end
+  def prove_builtin([:"=<",a,b],y,env,def,n) do
+    a1 = eval(a,env)
+    b1 = eval(b,env)
+    if !is_number(a1) || !is_number(b1) do
+      throw "Error: =< not number"
+    end
+    if a1 <= b1 do
+      prove_all(y,env,def,n+1)
+    else
+      {false,env,def}
     end
   end
   def prove_builtin([:ask],y,env,def,n) do
