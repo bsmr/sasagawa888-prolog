@@ -24,7 +24,7 @@ defmodule Prolog do
 
   def find_var([],res) do Enum.reverse(res) end
   def find_var([x|xs],res) when is_list(x) do
-    res1 = find_var(x,res)
+    res1 = find_var(x,[])
     find_var(xs,res1++res)
   end
   def find_var([x|xs],res) do
@@ -103,8 +103,12 @@ defmodule Read do
     else if s2 == :',' do
       {s3,buf3} = parse1(buf2,[s1])
       {s3,buf3}
+    else if s2 == :is do
+      {s3,buf3} = parse2([],[],buf2)
+      {[:builtin,[s2,s1,s3]],buf3}
     else
       throw "error parse1"
+    end
     end
     end
     end
@@ -120,6 +124,59 @@ defmodule Read do
       true -> throw "error parse2"
     end
   end
+
+  # parse formula
+  def parse2([],[],buf) do
+    #IO.inspect binding()
+    {s,buf1} = read(buf)
+    cond do
+      s == :. -> throw "error 21"
+      is_func_atom(s) -> parse2([],[s],buf1)
+      true -> parse2([s],[],buf1)
+    end
+  end
+  def parse2([o1],[],buf) do
+    #IO.inspect binding()
+    {s,buf1} = read(buf)
+    cond do
+      s == :. -> {o1,buf1}
+      s == :"," -> {o1,buf1}
+      is_func_atom(s) -> parse2([o1],[s],buf1)
+      true -> throw "error 22"
+    end
+  end
+  def parse2([o1],[f1],buf) do
+    #IO.inspect binding()
+    {s,buf1} = read(buf)
+    cond do
+      is_func_atom(s) -> throw "error 22"
+      true -> parse2([s,o1],[f1],buf1)
+    end
+  end
+  def parse2([o1,o2],[f1],buf) do
+    #IO.inspect binding()
+    {s,buf1} = read(buf)
+    cond do
+      s == :. -> {[f1,o1,o2],buf1}
+      is_func_atom(s) && weight(s)<weight(f1) -> parse2([f1,o2,o1],[s],buf1)
+      is_func_atom(s) && weight(s)>=weight(f1) -> parse2([o1,o2],[s,f1],buf1)
+      true -> throw "error 23"
+    end
+  end
+  def parse2([o1,o2],[f1,f2],buf) do
+    #IO.inspect binding()
+    {s,buf1} = read(buf)
+    cond do
+      :.  -> throw "Error 24"
+      is_func_atom(s) -> throw "error 25"
+      true -> parse2([f2,o2,[f1,s,o1]],[],buf1)
+    end
+  end
+
+  def weight(:+) do 100 end
+  def weight(:-) do 100 end
+  def weight(:*) do 50 end
+  def weight(:/) do 50 end
 
   def read([]) do
     buf = IO.gets("") |> comment_line |> drop_eol |> tokenize
@@ -138,35 +195,37 @@ defmodule Read do
     read_list(xs,[])
   end
   def read([x,"("|xs]) do
-    name = String.to_atom(x)
     {tuple,rest} = read_tuple(xs,[])
     cond do
-      is_builtin_atom(name) -> {[:builtin,[name|tuple]],rest}
-      is_func_atom(name) -> {[name|tuple],rest}
-      true -> {[:pred,[name|tuple]],rest}
+      is_builtin_str(x) -> {[:builtin,[String.to_atom(x)|tuple]],rest}
+      is_func_str(x) -> {[String.to_atom(x)|tuple],rest}
+      true -> {[:pred,[String.to_atom(x)|tuple]],rest}
     end
   end
   def read([x,"."|_]) do
-    name = String.to_atom(x)
-    if is_builtin_atom(name) do
-      {[:builtin,[name]],["."]}
-    else
-      {[:pred,[name]],["."]}
+    cond do
+      is_builtin_str(x) -> {[:builtin,[String.to_atom(x)]],["."]}
+      is_atom_str(x) -> {[:pred,[String.to_atom(x)]],["."]}
+      is_var_str(x) -> {String.to_atom(x),["."]}
+      is_integer_str(x) ->{String.to_integer(x),["."]}
+      is_float_str(x) -> {String.to_float(x),["."]}
+      true -> {String.to_atom(x),["."]}
     end
   end
   def read([x,","|xs]) do
-    name = String.to_atom(x)
     cond do
-      is_builtin_atom(name) -> {[:builtin,[name]],[","|xs]}
-      is_atom_str(x) -> {[:pred,[name]],[","|xs]}
-      true -> {name,[","|xs]}
+      is_builtin_str(x) -> {[:builtin,[String.to_atom(x)]],[","|xs]}
+      is_atom_str(x) -> {[:pred,[String.to_atom(x)]],[","|xs]}
+      is_var_str(x) -> {String.to_atom(x),[","|xs]}
+      is_integer_str(x) ->{String.to_integer(x),[","|xs]}
+      is_float_str(x) -> {String.to_float(x),[","|xs]}
+      true -> {x,[","|xs]}
     end
   end
   def read([x|xs]) do
     cond do
       is_integer_str(x) -> {String.to_integer(x),xs}
       is_float_str(x) -> {String.to_float(x),xs}
-      x == "nil" -> {nil,xs}
       true -> {String.to_atom(x),xs}
     end
   end
@@ -176,7 +235,6 @@ defmodule Read do
     cond do
       is_integer_str(x) -> String.to_integer(x)
       is_float_str(x) -> String.to_float(x)
-      x == "nil" -> nil
       true -> String.to_atom(x)
     end
   end
@@ -254,37 +312,96 @@ defmodule Read do
   defp tokenize1([32,32|ls],token,res) do
     tokenize1(ls,token,res)
   end
+  defp tokenize1([32|ls],[],res) do
+    tokenize1(ls,[],res)
+  end
   defp tokenize1([32|ls],token,res) do
     token1 = token |> Enum.reverse |> List.to_string
     tokenize1(ls,[],[token1|res])
+  end
+  defp tokenize1([40|ls],[],res) do
+    tokenize1(ls,[],["("|res])
   end
   defp tokenize1([40|ls],token,res) do
     token1 = token |> Enum.reverse |> List.to_string
     tokenize1(ls,[],["(",token1|res])
   end
+  defp tokenize1([41|ls],[],res) do
+    tokenize1(ls,[],[")"|res])
+  end
   defp tokenize1([41|ls],token,res) do
     token1 = token |> Enum.reverse |> List.to_string
     tokenize1(ls,[],[")",token1|res])
+  end
+  defp tokenize1([91|ls],[],res) do
+    tokenize1(ls,[],["["|res])
   end
   defp tokenize1([91|ls],token,res) do
     token1 = token |> Enum.reverse |> List.to_string
     tokenize1(ls,[],["[",token1|res])
   end
+  defp tokenize1([93|ls],[],res) do
+    tokenize1(ls,[],["]"|res])
+  end
   defp tokenize1([93|ls],token,res) do
     token1 = token |> Enum.reverse |> List.to_string
     tokenize1(ls,[],["]",token1|res])
+  end
+  defp tokenize1([124|ls],[],res) do
+    tokenize1(ls,[],["|"|res])
   end
   defp tokenize1([124|ls],token,res) do
     token1 = token |> Enum.reverse |> List.to_string
     tokenize1(ls,[],["|",token1|res])
   end
+  defp tokenize1([44|ls],[],res) do
+    tokenize1(ls,[],[","|res])
+  end
   defp tokenize1([44|ls],token,res) do
     token1 = token |> Enum.reverse |> List.to_string
     tokenize1(ls,[],[",",token1|res])
   end
+  defp tokenize1([46|ls],[],res) do
+    tokenize1(ls,[],["."|res])
+  end
   defp tokenize1([46|ls],token,res) do
     token1 = token |> Enum.reverse |> List.to_string
     tokenize1(ls,[],[".",token1|res])
+  end
+  defp tokenize1([43|ls],[],res) do
+    tokenize1(ls,[],["+"|res])
+  end
+  defp tokenize1([43|ls],token,res) do
+    token1 = token |> Enum.reverse |> List.to_string
+    tokenize1(ls,[],["+",token1|res])
+  end
+  defp tokenize1([58,45|ls],[],res) do
+    tokenize1(ls,[],[":-"|res])
+  end
+  defp tokenize1([58,45|ls],token,res) do
+    token1 = token |> Enum.reverse |> List.to_string
+    tokenize1(ls,[],[":-",token1|res])
+  end
+  defp tokenize1([45|ls],[],res) do
+    tokenize1(ls,[],["-"|res])
+  end
+  defp tokenize1([45|ls],token,res) do
+    token1 = token |> Enum.reverse |> List.to_string
+    tokenize1(ls,[],["-",token1|res])
+  end
+  defp tokenize1([42|ls],[],res) do
+    tokenize1(ls,[],["*"|res])
+  end
+  defp tokenize1([42|ls],token,res) do
+    token1 = token |> Enum.reverse |> List.to_string
+    tokenize1(ls,[],["*",token1|res])
+  end
+  defp tokenize1([47|ls],[],res) do
+    tokenize1(ls,[],["/"|res])
+  end
+  defp tokenize1([47|ls],token,res) do
+    token1 = token |> Enum.reverse |> List.to_string
+    tokenize1(ls,[],["/",token1|res])
   end
   defp tokenize1([l|ls],token,res) do
     tokenize1(ls,[l|token],res)
@@ -341,8 +458,19 @@ defmodule Read do
     end
   end
 
-  def is_builtin_atom(x) do
-    Enum.member?([:assert,:halt,:write,:nl,:is,:listing,:ask,:=,:>,:<,:"=>",:"=<"],x)
+  def is_builtin_str(x) do
+    Enum.member?(["assert","halt","write","nl","is","listing","ask",
+                  ":=",">","<","=>","=<"],x)
+  end
+
+  def is_func_str(x) do
+    Enum.member?(["+","-","*","/","^"],x)
+  end
+
+  def is_var_str(x) do
+    x1 = String.at(x,0)
+    Enum.member?(["_","A","B","C","D","E","F","G","H","I","j","K","L","M","N",
+                  "O","P","Q","R","S","T","U","V","W","X","Y","Z"],x1)
   end
 
   def is_func_atom(x) do
