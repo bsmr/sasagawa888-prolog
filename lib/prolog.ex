@@ -22,7 +22,9 @@ defmodule Prolog do
     end
   end
 
-  def find_var([],res) do Enum.reverse(res) end
+  def find_var([],res) do
+    res |> remove_double() |> Enum.reverse()
+  end
   def find_var([x|xs],res) when is_list(x) do
     res1 = find_var(x,[])
     find_var(xs,res1++res)
@@ -32,6 +34,15 @@ defmodule Prolog do
       find_var(xs,[x|res])
     else
       find_var(xs,res)
+    end
+  end
+
+  def remove_double([]) do [] end
+  def remove_double([x|xs]) do
+    if Enum.member?(xs,x) do
+      remove_double(xs)
+    else
+      [x|remove_double(xs)]
     end
   end
 
@@ -103,9 +114,13 @@ defmodule Read do
     else if s2 == :',' do
       {s3,buf3} = parse1(buf2,[s1])
       {s3,buf3}
-    else if s2 == :is do
-      {s3,buf3} = parse2([],[],buf2)
-      {[:builtin,[s2,s1,s3]],buf3}
+    else if is_infix_builtin(s2) do
+      {s3,buf3,status} = parse2([],[],buf2)
+      cond do
+        status == :. -> {[:builtin,[s2,s1,s3]],buf3}
+        status == :"," -> parse1(buf3,[[:builtin,[s2,s1,s3]]])
+        true -> throw "error parse1"
+      end
     else
       throw "error parse1"
     end
@@ -117,11 +132,25 @@ defmodule Read do
   def parse1(buf,res) do
     {s1,buf1} = read(buf)
     {s2,buf2} = read(buf1)
-    cond do
-      s2 == :. -> {res++[s1],buf2}
-      s2 == :")" -> {res++[s1],buf2}
-      s2 == :"," -> parse1(buf2,res++[s1])
-      true -> throw "error parse2"
+    if s2 == :. do
+      {res++[s1],buf2}
+    else if s2 == :")" do
+      {res++[s1],buf2}
+    else if s2 == :"," do
+      parse1(buf2,res++[s1])
+    else if is_infix_builtin(s2) do
+      {s3,buf3,status} = parse2([],[],buf2)
+      if status == :"," do
+        parse1(buf3,[[:builtin,[s2,s1,s3]]])
+      else if status == :. do
+        {res++[[:builtin,[s2,s1,s3]]],buf2}
+      end
+      end
+    else
+      throw "error parse2"
+    end
+    end
+    end
     end
   end
 
@@ -139,8 +168,8 @@ defmodule Read do
     #IO.inspect binding()
     {s,buf1} = read(buf)
     cond do
-      s == :. -> {o1,buf1}
-      s == :"," -> {o1,buf1}
+      s == :. -> {o1,buf1,:.}
+      s == :"," -> {o1,buf1,:","}
       is_func_atom(s) -> parse2([o1],[s],buf1)
       true -> throw "error 22"
     end
@@ -157,7 +186,8 @@ defmodule Read do
     #IO.inspect binding()
     {s,buf1} = read(buf)
     cond do
-      s == :. -> {[f1,o1,o2],buf1}
+      s == :. -> {[f1,o1,o2],buf1,:.}
+      s == :"," -> {[f1,o1,o2],buf1,:","}
       is_func_atom(s) && weight(s)<weight(f1) -> parse2([f1,o2,o1],[s],buf1)
       is_func_atom(s) && weight(s)>=weight(f1) -> parse2([o1,o2],[s,f1],buf1)
       true -> throw "error 23"
@@ -475,6 +505,10 @@ defmodule Read do
 
   def is_func_atom(x) do
     Enum.member?([:+,:-,:*,:/,:^],x)
+  end
+
+  def is_infix_builtin(x) do
+    Enum.member?([:is,:=,:"=..",:==],x)
   end
 
 end
