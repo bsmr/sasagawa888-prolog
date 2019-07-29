@@ -122,7 +122,7 @@ defmodule Read do
         true -> throw "error parse1"
       end
     else
-      throw "error parse1"
+      throw "error parse"
     end
     end
     end
@@ -143,11 +143,14 @@ defmodule Read do
       if status == :"," do
         parse1(buf3,[[:builtin,[s2,s1,s3]]])
       else if status == :. do
-        {res++[[:builtin,[s2,s1,s3]]],buf2}
+        {res++[[:builtin,[s2,s1,s3]]],buf3}
+      else if status == :")" do
+        {res++[[:builtin,[s2,s1,s3]]],buf3}
+      end
       end
       end
     else
-      throw "error parse2"
+      throw "error parse1"
     end
     end
     end
@@ -178,7 +181,7 @@ defmodule Read do
     #IO.inspect binding()
     {s,buf1} = read(buf)
     cond do
-      is_func_atom(s) -> throw "error 22"
+      is_func_atom(s) -> throw "error 23"
       true -> parse2([s,o1],[f1],buf1)
     end
   end
@@ -186,19 +189,20 @@ defmodule Read do
     #IO.inspect binding()
     {s,buf1} = read(buf)
     cond do
-      s == :. -> {[f1,o1,o2],buf1,:.}
-      s == :"," -> {[f1,o1,o2],buf1,:","}
+      s == :. -> {[:function,[f1,o2,o1]],buf1,:.}
+      s == :"," -> {[:function,[f1,o2,o1]],buf1,:","}
+      s == :")" -> {[:function,[f1,o2,o1]],buf1,:")"}
       is_func_atom(s) && weight(s)<weight(f1) -> parse2([f1,o2,o1],[s],buf1)
       is_func_atom(s) && weight(s)>=weight(f1) -> parse2([o1,o2],[s,f1],buf1)
-      true -> throw "error 23"
+      true -> throw "error 24"
     end
   end
   def parse2([o1,o2],[f1,f2],buf) do
     #IO.inspect binding()
     {s,buf1} = read(buf)
     cond do
-      :.  -> throw "Error 24"
-      is_func_atom(s) -> throw "error 25"
+      :.  -> throw "Error 25"
+      is_func_atom(s) -> throw "error 26"
       true -> parse2([f2,o2,[f1,s,o1]],[],buf1)
     end
   end
@@ -678,6 +682,9 @@ defmodule Prove do
   def eval(x,_) when is_number(x) do x end
   def eval(x,env) when is_atom(x) do
      deref(x,env)
+  end
+  def eval([:function,x],env) do
+    eval(x,env)
   end
   def eval([:+,x,y],env) do
     eval(x,env) + eval(y,env)

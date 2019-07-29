@@ -21,7 +21,7 @@ Compiling 1 file (.ex)
 Prolog in Elixir
 ?- assert(fact(0,1)).
 true
-?- assert((fact(N,A) :- is(N1,-(N,1)),fact(N1,A1),is(A,*(N,A1)))).
+?- assert((fact(N,A) :- N1 is N-1,fact(N1,A1),A is N*A1)).
 true
 ?- fact(10,X).
 X = 3628800
