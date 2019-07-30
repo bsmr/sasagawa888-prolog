@@ -203,7 +203,7 @@ defmodule Read do
     cond do
       s == :.  -> throw "Error 25"
       is_func_atom(s) -> throw "error 26"
-      true -> parse2([[f2,o2,[f1,s,o1]]],[],buf1)
+      true -> parse2([[f2,o2,[f1,o1,s]]],[],buf1)
     end
   end
 
