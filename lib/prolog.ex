@@ -69,6 +69,9 @@ defmodule Prolog do
   def is_builtin([:builtin,_]) do true end
   def is_builtin(_) do false end
 
+  def is_formula([:formula,_]) do true end
+  def is_formula(_) do false end
+
   def  is_var(x) do
     if is_atomvar(x) || is_variant(x) do
       true
@@ -517,7 +520,7 @@ defmodule Read do
 
 end
 
-  #----------------prove-------------
+#----------------prove-----------------------------------
 defmodule Prove do
   def prove([:pred,x],y,env,def,n) do
     [name|_] = x
@@ -832,6 +835,7 @@ defmodule Print do
       Prolog.is_pred(x) -> print_pred(x)
       Prolog.is_builtin(x) -> print_pred(x)
       Prolog.is_clause(x) -> print_clause(x)
+      Prolog.is_formula(x) -> print_formula(x)
       true -> print_list(x)
     end
   end
@@ -854,6 +858,22 @@ defmodule Print do
     print_body(xs)
   end
 
+  def print_formula([:formula,x]) do
+    print_formula1(x)
+  end
+
+  def print_formula1([]) do true end
+  def print_formula1(x) when is_number(x) do
+    IO.write(x)
+  end
+  def print_formula1(x) when is_atom(x) do
+    IO.write(x)
+  end
+  def print_formula1([f,o1,o2]) do
+    print_formula1(o1)
+    IO.write(f)
+    print_formula1(o2)
+  end
 
   defp print_list([]) do
     IO.puts("[]")
