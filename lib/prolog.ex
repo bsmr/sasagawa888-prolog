@@ -192,8 +192,8 @@ defmodule Read do
       s == :. -> {[:formula,[f1,o2,o1]],buf1,:.}
       s == :"," -> {[:formula,[f1,o2,o1]],buf1,:","}
       s == :")" -> {[:formula,[f1,o2,o1]],buf1,:")"}
-      is_func_atom(s) && weight(s)<weight(f1) -> parse2([f1,o2,o1],[s],buf1)
-      is_func_atom(s) && weight(s)>=weight(f1) -> parse2([o1,o2],[s,f1],buf1)
+      is_func_atom(s) && weight(s)>=weight(f1) -> parse2([[f1,o2,o1]],[s],buf1)
+      is_func_atom(s) && weight(s)<weight(f1) -> parse2([o1,o2],[s,f1],buf1)
       true -> throw "error 24"
     end
   end
@@ -201,9 +201,9 @@ defmodule Read do
     #IO.inspect binding()
     {s,buf1} = read(buf)
     cond do
-      :.  -> throw "Error 25"
+      s == :.  -> throw "Error 25"
       is_func_atom(s) -> throw "error 26"
-      true -> parse2([f2,o2,[f1,s,o1]],[],buf1)
+      true -> parse2([[f2,o2,[f1,s,o1]]],[],buf1)
     end
   end
 
