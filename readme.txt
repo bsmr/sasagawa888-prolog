@@ -13,7 +13,12 @@ builtin:
   assert/1
   is/2
   =/2
+  </2
+  >/2
+  =>/2
+  =</2
   halt/0
+  listing/0
 
 Example:
 mix prolog

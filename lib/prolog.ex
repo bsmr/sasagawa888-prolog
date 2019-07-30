@@ -189,9 +189,9 @@ defmodule Read do
     #IO.inspect binding()
     {s,buf1} = read(buf)
     cond do
-      s == :. -> {[:function,[f1,o2,o1]],buf1,:.}
-      s == :"," -> {[:function,[f1,o2,o1]],buf1,:","}
-      s == :")" -> {[:function,[f1,o2,o1]],buf1,:")"}
+      s == :. -> {[:formula,[f1,o2,o1]],buf1,:.}
+      s == :"," -> {[:formula,[f1,o2,o1]],buf1,:","}
+      s == :")" -> {[:formula,[f1,o2,o1]],buf1,:")"}
       is_func_atom(s) && weight(s)<weight(f1) -> parse2([f1,o2,o1],[s],buf1)
       is_func_atom(s) && weight(s)>=weight(f1) -> parse2([o1,o2],[s,f1],buf1)
       true -> throw "error 24"
@@ -512,7 +512,7 @@ defmodule Read do
   end
 
   def is_infix_builtin(x) do
-    Enum.member?([:is,:=,:"=..",:==],x)
+    Enum.member?([:is,:=,:"=..",:==,:"=>",:"=<",:>,:<],x)
   end
 
 end
@@ -683,7 +683,7 @@ defmodule Prove do
   def eval(x,env) when is_atom(x) do
      deref(x,env)
   end
-  def eval([:function,x],env) do
+  def eval([:formula,x],env) do
     eval(x,env)
   end
   def eval([:+,x,y],env) do
