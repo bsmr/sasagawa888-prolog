@@ -25,6 +25,14 @@ defmodule Prolog do
   def find_var([],res) do
     res |> remove_double() |> Enum.reverse()
   end
+  def find_var(x,res) when is_number(x) do res end
+  def find_var(x,res) when is_atom(x) do
+    if is_var(x) && !Enum.member?(res,x) do
+      [x|res]
+    else
+      res
+    end
+  end
   def find_var([x|xs],res) when is_list(x) do
     res1 = find_var(x,[])
     find_var(xs,res1++res)
@@ -291,17 +299,18 @@ defmodule Read do
   defp read_list([""|xs],ls) do
     read_list(xs,ls)
   end
-  defp read_list(["|"|xs],ls) do
-    {s,rest} = read_list(xs,[])
-    if length(s) == 1 do
-      read_list(rest,[hd(ls)|hd(s)])
-    else
-      read_list(rest,ls++s)
-    end
+  defp read_list([x,"|"|xs],ls) do
+    s = read1(x)
+    {s1,rest} = read_list(xs,[])
+    {ls++[s]++hd(s1),rest}
   end
   defp read_list([x,","|xs],ls) do
     s = read1(x)
     read_list(xs,ls++[s])
+  end
+  defp read_list([x,"]",","|xs],ls) do
+    s = read1(x)
+    {ls++[s],xs}
   end
   defp read_list([x,"]"|xs],ls) do
     s = read1(x)
@@ -322,13 +331,8 @@ defmodule Read do
   defp read_tuple([""|xs],ls) do
     read_tuple(xs,ls)
   end
-  defp read_tuple([x,","|xs],ls) do
-    {s,_} = read([x])
-    read_tuple(xs,ls++[s])
-  end
-  defp read_tuple([x,")"|xs],ls) do
-    {s,_} = read([x])
-    {ls++[s],xs}
+  defp read_tuple([","|xs],ls) do
+    read_tuple(xs,ls)
   end
   defp read_tuple(x,ls) do
     {s,rest} = read(x)
@@ -876,7 +880,7 @@ defmodule Print do
   end
 
   defp print_list([]) do
-    IO.puts("[]")
+    IO.write("[]")
   end
   defp print_list([x|xs]) do
     IO.write("[")

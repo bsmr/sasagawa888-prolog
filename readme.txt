@@ -20,6 +20,8 @@ builtin:
   halt/0
   listing/0
 
+
+
 Example:
 mix prolog
 Compiling 1 file (.ex)
@@ -66,3 +68,6 @@ Who = sandy;
 false
 ?-halt.
 goodbye
+
+?- assert(append([], Xs, Xs)).
+?- assert((append([X | Ls], Ys, [X | Zs]) :- append(Ls, Ys, Zs))).
